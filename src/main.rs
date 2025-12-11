@@ -16,9 +16,23 @@ fn main() {
         };
         match cmd {
             MskCommand::Builtin(BuiltinCommand::ECHO, args) => {
-                println!("{}", args.join(" "));
+                println!("{}", args.unwrap().join(" "));
             }
             MskCommand::Builtin(BuiltinCommand::EXIT, _) => break,
+            MskCommand::Builtin(BuiltinCommand::TYPE, args) => {
+                let args = args.unwrap();
+                match parse_command(&args[0]) {
+                    None => {
+                        println!("Usage: type <command>");
+                    }
+                    Some(MskCommand::Builtin(command_type, _)) => {
+                        println!("{} is a shell builtin", command_type.name());
+                    }
+                    Some(MskCommand::Unknown(name)) => {
+                        println!("{}: not found", name);
+                    }
+                };
+            }
             MskCommand::Unknown(name) => {
                 println!("{}: command not found", name);
             }
