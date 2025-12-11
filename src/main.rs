@@ -31,8 +31,12 @@ fn main() {
                     Some(MskCommand::Unknown(name)) => {
                         println!("{}: not found", name);
                     }
+                    Some(MskCommand::External(name, paths)) => {
+                        println!("{} is {}", name, paths[0].to_string_lossy());
+                    }
                 };
             }
+            MskCommand::External(_, _) => {}
             MskCommand::Unknown(name) => {
                 println!("{}: command not found", name);
             }
