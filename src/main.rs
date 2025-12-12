@@ -1,7 +1,7 @@
+use crate::command::{BuiltinCommand, MskCommand, parse_command, run_command};
 #[allow(unused_imports)]
 use std::io::{self, Write};
 
-use crate::command::{BuiltinCommand, MskCommand, parse_command};
 mod command;
 fn main() {
     loop {
@@ -31,12 +31,14 @@ fn main() {
                     Some(MskCommand::Unknown(name)) => {
                         println!("{}: not found", name);
                     }
-                    Some(MskCommand::External(name, paths)) => {
+                    Some(MskCommand::External(name, paths, _)) => {
                         println!("{} is {}", name, paths[0].to_string_lossy());
                     }
                 };
             }
-            MskCommand::External(_, _) => {}
+            MskCommand::External(name, _paths, args) => {
+                run_command(&name, args.as_deref());
+            }
             MskCommand::Unknown(name) => {
                 println!("{}: command not found", name);
             }
