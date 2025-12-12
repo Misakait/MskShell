@@ -1,61 +1,49 @@
+#[cfg(feature = "std")]
+use crate::terminal_io::StdioTerminal;
 use crate::{
-    command::{BuiltinCommand, MskCommand, parse_command, run_command},
-    navigation::{change_directory, get_current_working_dir},
+    command::{parse_command, process_cmd},
+    line_editor::LineEditor,
+    raw_mode_guard::RawModeGuard,
+    terminal_io::TerminalIO,
 };
 #[allow(unused_imports)]
 use std::io::{self, Write};
 
 mod command;
+mod line_editor;
 mod navigation;
-fn main() {
+mod raw_mode_guard;
+mod terminal_io;
+fn main() -> Result<(), io::Error> {
+    let _raw_guard = RawModeGuard::new()?;
+    #[cfg(feature = "std")]
+    let mut terminal = StdioTerminal::new();
+    let mut editor = LineEditor::new();
+    terminal.write_str("$ ");
+    terminal.flush();
     loop {
-        print!("$ ");
-        let mut input = String::new();
-        io::stdout().flush().unwrap();
-        io::stdin().read_line(&mut input).unwrap();
-        let cmd_opt = parse_command(&input);
-        let cmd = match cmd_opt {
-            None => continue, // 空行，继续读取下一行
-            Some(c) => c,
-        };
-        match cmd {
-            MskCommand::Builtin(BuiltinCommand::ECHO, args) => {
-                println!("{}", args.unwrap().join(" "));
-            }
-            MskCommand::Builtin(BuiltinCommand::EXIT, _) => break,
-            MskCommand::Builtin(BuiltinCommand::PWD, _) => {
-                println!("{}", get_current_working_dir());
-            }
-            MskCommand::Builtin(BuiltinCommand::CD, args) => {
-                if let Some(path) = args {
-                    change_directory(&path[0]);
-                } else {
-                    change_directory("~");
-                }
-            }
-            MskCommand::Builtin(BuiltinCommand::TYPE, args) => {
-                let args = args.unwrap();
-                match parse_command(&args[0]) {
+        if let Some(byte) = terminal.read_byte() {
+            if let Some(input) = editor.handle_byte(byte, &mut terminal) {
+                let cmd_opt = parse_command(&input);
+                let cmd = match cmd_opt {
                     None => {
-                        println!("Usage: type <command>");
-                    }
-                    Some(MskCommand::Builtin(command_type, _)) => {
-                        println!("{} is a shell builtin", command_type.name());
-                    }
-                    Some(MskCommand::Unknown(name)) => {
-                        println!("{}: not found", name);
-                    }
-                    Some(MskCommand::External(name, paths, _)) => {
-                        println!("{} is {}", name, paths[0].to_string_lossy());
-                    }
+                        terminal.write_str("\r");
+                        terminal.write_str("$ ");
+                        terminal.flush();
+                        continue;
+                    } // 空行，继续读取下一行
+                    Some(c) => c,
                 };
+                if let Err(_) = process_cmd(cmd, &mut terminal) {
+                    break;
+                }
+                terminal.write_str("\r");
+                terminal.write_str("$ ");
             }
-            MskCommand::External(name, _paths, args) => {
-                run_command(&name, args.as_deref());
-            }
-            MskCommand::Unknown(name) => {
-                println!("{}: command not found", name);
-            }
+
+            // 每处理完一个字节，刷新一下缓冲区,保证回显输出
+            terminal.flush();
         }
     }
+    Ok(())
 }

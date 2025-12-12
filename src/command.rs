@@ -2,6 +2,11 @@ use std::fs;
 use std::process::Command;
 use std::{env, path::PathBuf};
 
+use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
+
+use crate::navigation::{change_directory, get_current_working_dir};
+use crate::terminal_io::TerminalIO;
+
 pub enum BuiltinCommand {
     ECHO,
     EXIT,
@@ -25,7 +30,11 @@ pub enum MskCommand {
     External(String, Vec<PathBuf>, Option<Vec<String>>),
     Unknown(String),
 }
-
+pub enum Args {
+    Raw(String),
+    SingleQuotes(String),
+    DoubleQuotes(String),
+}
 /// 也许这里可以传进String
 pub fn parse_command(input: &str) -> Option<MskCommand> {
     let mut parts = input.split_whitespace();
@@ -35,7 +44,13 @@ pub fn parse_command(input: &str) -> Option<MskCommand> {
     match cmd {
         "echo" => Some(MskCommand::Builtin(BuiltinCommand::ECHO, Some(args))),
         "exit" => Some(MskCommand::Builtin(BuiltinCommand::EXIT, None)),
-        "type" => Some(MskCommand::Builtin(BuiltinCommand::TYPE, Some(args))),
+        "type" => {
+            if args.is_empty() {
+                Some(MskCommand::Builtin(BuiltinCommand::TYPE, None))
+            } else {
+                Some(MskCommand::Builtin(BuiltinCommand::TYPE, Some(args)))
+            }
+        }
         "pwd" => Some(MskCommand::Builtin(BuiltinCommand::PWD, None)),
         "cd" => {
             if args.is_empty() {
@@ -63,6 +78,61 @@ pub fn parse_command(input: &str) -> Option<MskCommand> {
             Some(MskCommand::Unknown(other.to_string()))
         }
     }
+}
+pub fn process_cmd(cmd: MskCommand, terminal: &mut impl TerminalIO) -> Result<(), ()> {
+    match cmd {
+        MskCommand::Builtin(BuiltinCommand::ECHO, args) => {
+            terminal.write_str(&format!("{}", args.unwrap().join(" ")));
+            terminal.write_str("\r\n");
+        }
+        MskCommand::Builtin(BuiltinCommand::EXIT, _) => return Err(()),
+        MskCommand::Builtin(BuiltinCommand::PWD, _) => {
+            let pwd = get_current_working_dir();
+            terminal.write_str(&pwd);
+            terminal.write_str("\r\n");
+        }
+        MskCommand::Builtin(BuiltinCommand::CD, args) => {
+            if let Some(path) = args {
+                change_directory(&path[0]);
+            } else {
+                change_directory("~");
+            }
+        }
+        MskCommand::Builtin(BuiltinCommand::TYPE, args_opt) => {
+            let msg = {
+                if let Some(args) = args_opt {
+                    match parse_command(&args[0]) {
+                        None => unreachable!(),
+                        Some(MskCommand::Builtin(command_type, _)) => {
+                            format!("{} is a shell builtin", command_type.name())
+                        }
+                        Some(MskCommand::Unknown(name)) => {
+                            format!("{}: not found", name)
+                        }
+                        Some(MskCommand::External(name, paths, _)) => {
+                            format!("{} is {}", name, paths[0].to_string_lossy())
+                        }
+                    }
+                } else {
+                    "Usage: type <command>".to_string()
+                }
+            };
+
+            terminal.write_str(&msg);
+            terminal.write_str("\r\n");
+        }
+        MskCommand::External(name, _paths, args) => {
+            terminal.flush();
+            let _ = disable_raw_mode();
+            run_command(&name, args.as_deref());
+            let _ = enable_raw_mode();
+        }
+        MskCommand::Unknown(name) => {
+            terminal.write_str(&name);
+            terminal.write_str(": command not found\r\n");
+        }
+    }
+    Ok(())
 }
 pub fn run_command(executable_file: &str, args_opt: Option<&[String]>) {
     let mut command = Command::new(executable_file);
