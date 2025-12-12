@@ -1,8 +1,12 @@
-use crate::command::{BuiltinCommand, MskCommand, parse_command, run_command};
+use crate::{
+    command::{BuiltinCommand, MskCommand, parse_command, run_command},
+    navigation::get_current_working_dir,
+};
 #[allow(unused_imports)]
 use std::io::{self, Write};
 
 mod command;
+mod navigation;
 fn main() {
     loop {
         print!("$ ");
@@ -19,6 +23,9 @@ fn main() {
                 println!("{}", args.unwrap().join(" "));
             }
             MskCommand::Builtin(BuiltinCommand::EXIT, _) => break,
+            MskCommand::Builtin(BuiltinCommand::PWD, _) => {
+                println!("{}", get_current_working_dir());
+            }
             MskCommand::Builtin(BuiltinCommand::TYPE, args) => {
                 let args = args.unwrap();
                 match parse_command(&args[0]) {

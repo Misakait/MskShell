@@ -6,6 +6,7 @@ pub enum BuiltinCommand {
     ECHO,
     EXIT,
     TYPE,
+    PWD,
 }
 impl BuiltinCommand {
     pub fn name(&self) -> &'static str {
@@ -13,6 +14,7 @@ impl BuiltinCommand {
             BuiltinCommand::ECHO => "echo",
             BuiltinCommand::EXIT => "exit",
             BuiltinCommand::TYPE => "type",
+            BuiltinCommand::PWD => "pwd",
         }
     }
 }
@@ -32,6 +34,7 @@ pub fn parse_command(input: &str) -> Option<MskCommand> {
         "echo" => Some(MskCommand::Builtin(BuiltinCommand::ECHO, Some(args))),
         "exit" => Some(MskCommand::Builtin(BuiltinCommand::EXIT, None)),
         "type" => Some(MskCommand::Builtin(BuiltinCommand::TYPE, Some(args))),
+        "pwd" => Some(MskCommand::Builtin(BuiltinCommand::PWD, None)),
         other => {
             let env_path = env::var_os("PATH");
             if let Some(os_string) = env_path {
