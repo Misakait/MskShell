@@ -75,7 +75,9 @@ fn consolidate_args(args: Vec<Args>) -> Vec<String> {
 /// 也许这里可以传进String
 pub fn parse_command(input: &str) -> Option<MskCommand> {
     let (cmd, args) = parse_input_to_args(input);
+    // println!("{:?}", args);
     let args = consolidate_args(args);
+    // println!("{:?}", args);
     // args.into_iter().map(|arg| arg.into_string())
     // let mut parts = input.split_whitespace();
     // let cmd = parts.next()?; // 如果没有 token 则返回 None (跳过空行)
@@ -169,9 +171,10 @@ pub fn parse_input_to_args(input: &str) -> (String, Vec<Args>) {
                 ) && char.is_whitespace()
                 {
                     args.push(Args::Split);
-                } else {
-                    str.push(char);
                 }
+                // else {
+                str.push(char);
+                // }
                 while let Some(c) = input_iter.peek() {
                     match c {
                         '\'' | '\"' => {
