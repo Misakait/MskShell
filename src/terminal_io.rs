@@ -55,9 +55,12 @@ impl TerminalIO for StdioTerminal {
         // if let Some(b) = self.pending_bytes.pop_front() {
         //     return Some(MskEvent::Key(MskKeyCode::Char(b)));
         // }
-        use crossterm::event::{Event, KeyCode, read};
+        use crossterm::event::{Event, KeyCode, KeyModifiers, read};
         match read() {
             Ok(Event::Key(key_event)) => match key_event.code {
+                KeyCode::Char('j') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
+                    return Some(MskEvent::Key(MskKeyCode::Enter));
+                }
                 KeyCode::Char(c) => {
                     // let mut buf = [0; 4];
                     // let s = c.encode_utf8(&mut buf);
