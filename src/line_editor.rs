@@ -78,7 +78,7 @@ impl LineEditor {
         if self.cursor > 0 {
             self.buffer.remove(self.cursor - 1);
             self.cursor -= 1;
-            terminal.write_str("\x08 \x08");
+            terminal.write_str("\x08\x1b[P");
         }
         None
     }
@@ -102,7 +102,13 @@ impl LineEditor {
             let s = c.encode_utf8(&mut temp_buf);
             terminal.write_str(s);
         } else {
-            // TDOO: 如果是插入，还要重绘后面的字符...
+            terminal.write_str("\x1b[@");
+            self.buffer.insert(self.cursor, c);
+            self.cursor += 1;
+
+            let mut temp_buf = [0u8; 4];
+            let s = c.encode_utf8(&mut temp_buf);
+            terminal.write_str(s);
         }
         None
     }
