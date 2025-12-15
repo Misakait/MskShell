@@ -30,7 +30,7 @@ pub enum MskCommand {
     External(String, Vec<PathBuf>, Option<Vec<String>>),
     Unknown(String),
 }
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Args {
     Raw(String),
     SingleQuotes(String),
@@ -74,9 +74,23 @@ fn consolidate_args(args: Vec<Args>) -> Vec<String> {
 }
 /// 也许这里可以传进String
 pub fn parse_command(input: &str) -> Option<MskCommand> {
-    let (cmd, args) = parse_input_to_args(input);
+    let raw_tokens = parse_input_to_args(input);
+
+    // 合并、展开、处理转义 (Merge & Expand)
+    // 这一步之后，我们得到一个纯净的字符串列表
+    // 例如: ["my program", "arg1", "arg2"]
+    let mut all_parts = consolidate_args(raw_tokens);
+
+    // 3. 提取命令 (取出第一个)
+    if all_parts.is_empty() {
+        return None; // 输入只有空格或为空
+    }
+
+    // remove(0) 会移除并返回第一个元素，剩下的自动前移
+    let cmd = all_parts.remove(0);
+    let args = all_parts; // 剩下的就是参数列表
     // println!("{:?}", args);
-    let args = consolidate_args(args);
+    // let args = consolidate_args(all_args);
     // println!("{:?}", args);
     // args.into_iter().map(|arg| arg.into_string())
     // let mut parts = input.split_whitespace();
@@ -128,18 +142,17 @@ enum ParseState {
     InSingleQuotes, // 正在读取单引号内容
     InDoubleQuotes, // 正在读取双引号内容
 }
-pub fn parse_input_to_args(input: &str) -> (String, Vec<Args>) {
+pub fn parse_input_to_args(input: &str) -> Vec<Args> {
     let mut args: Vec<Args> = Vec::new();
-    let mut cmd = String::new();
 
     // 1. 提取命令名 (保持你原来的逻辑，遇到空白停止)
     let mut chars = input.chars().peekable();
-    while let Some(&c) = chars.peek() {
-        if c.is_whitespace() {
-            break;
-        }
-        cmd.push(chars.next().unwrap());
-    }
+    // while let Some(&c) = chars.peek() {
+    //     if c.is_whitespace() {
+    //         break;
+    //     }
+    //     cmd.push(chars.next().unwrap());
+    // }
 
     // 2. 状态机解析参数
     let mut current_token = String::new();
@@ -181,7 +194,6 @@ pub fn parse_input_to_args(input: &str) -> (String, Vec<Args>) {
                             current_token.clear();
                         }
                         // 只有当上一个不是 Split 时才 push，避免重复 Split
-                        // 根据 consolidate 逻辑，这里无脑 push Split 也可以，后面会清理
                         if !matches!(args.last(), Some(Args::Split)) {
                             args.push(Args::Split);
                         }
@@ -254,8 +266,11 @@ pub fn parse_input_to_args(input: &str) -> (String, Vec<Args>) {
     if matches!(args.last(), Some(Args::Split)) {
         args.pop();
     }
-
-    (cmd, args)
+    // 清理开头多余的 Split
+    if !args.is_empty() && matches!(args[0], Args::Split) {
+        args.remove(0);
+    }
+    args
 }
 // pub fn parse_input_to_args(input: &str) -> (String, Vec<Args>) {
 //     let mut args: Vec<Args> = Vec::new();
