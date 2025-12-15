@@ -173,10 +173,32 @@ pub fn parse_input_to_args(input: &str) -> (String, Vec<Args>) {
                     args.push(Args::Split);
                 }
                 // else {
-                str.push(char);
+                if char == '\\' {
+                    match input_iter.next() {
+                        Some(c) => str.push(c),
+                        None => {}
+                    }
+                    match input_iter.peek() {
+                        Some(_c) => {}
+                        None => args.push(Args::Raw(str.to_string())),
+                    }
+                } else {
+                    str.push(char);
+                }
                 // }
                 while let Some(c) = input_iter.peek() {
                     match c {
+                        '\\' => {
+                            // 直接吞下\
+                            // let c = input_iter.next().unwrap();
+                            // str.push(c);
+                            input_iter.next().unwrap();
+                            // 吞下下一个字符
+                            match input_iter.next() {
+                                Some(c) => str.push(c),
+                                None => args.push(Args::Raw(str.trim().to_string())),
+                            }
+                        }
                         '\'' | '\"' => {
                             let mut iter_clone = input_iter.clone();
                             let next = iter_clone.next();
