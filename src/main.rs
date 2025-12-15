@@ -22,8 +22,8 @@ fn main() -> Result<(), io::Error> {
     terminal.write_str("$ ");
     terminal.flush();
     loop {
-        if let Some(byte) = terminal.read_byte() {
-            if let Some(input) = editor.handle_byte(byte, &mut terminal) {
+        if let Some(event) = terminal.get_event() {
+            if let Some(input) = editor.handle_event(event, &mut terminal) {
                 let cmd_opt = parse_command(&input);
                 let cmd = match cmd_opt {
                     None => {
