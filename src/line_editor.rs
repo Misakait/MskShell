@@ -1,4 +1,5 @@
-use crate::terminal_io::{MskEvent, MskKeyCode, TerminalIO};
+use crate::terminal_io::{MskEvent, MskKeyCode};
+use std::io::{self, Write};
 
 pub struct LineEditor {
     buffer: Vec<char>, // 存的是完整的字符
@@ -45,52 +46,48 @@ impl LineEditor {
     //         }
     //     }
     // }
-    pub fn handle_event(
-        &mut self,
-        event: MskEvent,
-        terminal: &mut impl TerminalIO,
-    ) -> Option<String> {
+    pub fn handle_event(&mut self, event: MskEvent) -> Option<String> {
         match event {
             MskEvent::Key(msk_key_code) => match msk_key_code {
-                MskKeyCode::Char(c) => self.handle_char(c, terminal),
-                MskKeyCode::Backspace => self.handle_backsapce(terminal),
-                MskKeyCode::Enter => self.handle_return(terminal),
-                MskKeyCode::ArrowRight => self.handle_arrow_right(terminal),
-                MskKeyCode::ArrowLeft => self.handle_arrow_left(terminal),
+                MskKeyCode::Char(c) => self.handle_char(c),
+                MskKeyCode::Backspace => self.handle_backsapce(),
+                MskKeyCode::Enter => self.handle_return(),
+                MskKeyCode::ArrowRight => self.handle_arrow_right(),
+                MskKeyCode::ArrowLeft => self.handle_arrow_left(),
             },
         }
     }
-    fn handle_arrow_right(&mut self, terminal: &mut impl TerminalIO) -> Option<String> {
+    fn handle_arrow_right(&mut self) -> Option<String> {
         if self.cursor < self.buffer.len() {
             self.cursor += 1;
-            terminal.write_str("\x1b[C");
+            let _ = write!(io::stdout(), "\x1b[C");
         }
         None
     }
-    fn handle_arrow_left(&mut self, terminal: &mut impl TerminalIO) -> Option<String> {
+    fn handle_arrow_left(&mut self) -> Option<String> {
         if self.cursor > 0 {
             self.cursor -= 1;
-            terminal.write_str("\x1b[D");
+            let _ = write!(io::stdout(), "\x1b[D");
         }
         None
     }
-    fn handle_backsapce(&mut self, terminal: &mut impl TerminalIO) -> Option<String> {
+    fn handle_backsapce(&mut self) -> Option<String> {
         if self.cursor > 0 {
             self.buffer.remove(self.cursor - 1);
             self.cursor -= 1;
-            terminal.write_str("\x08\x1b[P");
+            let _ = write!(io::stdout(), "\x08\x1b[P");
         }
         None
     }
-    fn handle_return(&mut self, terminal: &mut impl TerminalIO) -> Option<String> {
+    fn handle_return(&mut self) -> Option<String> {
         let line: String = self.buffer.iter().collect();
         self.buffer.clear();
         self.cursor = 0;
-        terminal.write_str("\r\n");
+        let _ = write!(io::stdout(), "\r\n");
         Some(line)
     }
     // TODO: 以后支持中文逻辑
-    fn handle_char(&mut self, c: char, terminal: &mut impl TerminalIO) -> Option<String> {
+    fn handle_char(&mut self, c: char) -> Option<String> {
         if self.cursor == self.buffer.len() {
             // 插入字符
             self.buffer.insert(self.cursor, c);
@@ -100,15 +97,15 @@ impl LineEditor {
             // 注意：这里回显不能只 write_byte，要 write_str
             let mut temp_buf = [0u8; 4];
             let s = c.encode_utf8(&mut temp_buf);
-            terminal.write_str(s);
+            let _ = write!(io::stdout(), "{}", s);
         } else {
-            terminal.write_str("\x1b[@");
+            let _ = write!(io::stdout(), "\x1b[@");
             self.buffer.insert(self.cursor, c);
             self.cursor += 1;
 
             let mut temp_buf = [0u8; 4];
             let s = c.encode_utf8(&mut temp_buf);
-            terminal.write_str(s);
+            let _ = write!(io::stdout(), "{}", s);
         }
         None
     }
