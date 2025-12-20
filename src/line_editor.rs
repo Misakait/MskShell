@@ -139,7 +139,7 @@ impl LineEditor {
         let prefix: String = self.buffer.iter().collect();
         // println!("1{}\r", prefix);
         // println!("{:?}/r", all_commands);
-        if let Some(commands) = all_commands.search_prefix(&prefix) {
+        if let Some(mut commands) = all_commands.search_prefix(&prefix) {
             // println!("2{:?}\r", commands);
             let longest_prefix_opt = longest_common_prefix(&commands);
             // println!("3{:?}\r", longest_prefix_opt);
@@ -155,6 +155,7 @@ impl LineEditor {
                         // 重新设置tab状态
                         self.has_tab = false;
                         // TODO: 以后不用换行来补全，直接在命令下方展示
+                        commands.sort();
                         let tips = commands.join("  ");
                         let _ = write!(io::stdout(), "\r\n{}\r\n", tips);
                         let _ = write!(io::stdout(), "$ ");
