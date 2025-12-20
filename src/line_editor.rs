@@ -94,19 +94,21 @@ impl LineEditor {
         Some(line)
     }
     // TODO: 以后支持中文逻辑
-    fn retype_char(&mut self, c: char) -> Option<String> {
-        if self.cursor == self.buffer.len() {
-            // 回显逻辑也要支持中文！
-            // 注意：这里回显不能只 write_byte，要 write_str
-            let mut temp_buf = [0u8; 4];
-            let s = c.encode_utf8(&mut temp_buf);
-            let _ = write!(io::stdout(), "{}", s);
-        } else {
-            let _ = write!(io::stdout(), "\x1b[@");
+    fn retype_buffer(&mut self) -> Option<String> {
+        for c in self.buffer.iter() {
+            if self.cursor == self.buffer.len() {
+                // 回显逻辑也要支持中文！
+                // 注意：这里回显不能只 write_byte，要 write_str
+                let mut temp_buf = [0u8; 4];
+                let s = c.encode_utf8(&mut temp_buf);
+                let _ = write!(io::stdout(), "{}", s);
+            } else {
+                let _ = write!(io::stdout(), "\x1b[@");
 
-            let mut temp_buf = [0u8; 4];
-            let s = c.encode_utf8(&mut temp_buf);
-            let _ = write!(io::stdout(), "{}", s);
+                let mut temp_buf = [0u8; 4];
+                let s = c.encode_utf8(&mut temp_buf);
+                let _ = write!(io::stdout(), "{}", s);
+            }
         }
         None
     }
@@ -156,9 +158,7 @@ impl LineEditor {
                         let tips = commands.join("  ");
                         let _ = write!(io::stdout(), "\r\n{}\r\n", tips);
                         let _ = write!(io::stdout(), "$ ");
-                        for c in prefix.chars() {
-                            self.retype_char(c);
-                        }
+                        self.retype_buffer();
                     }
                     return None;
                 }
