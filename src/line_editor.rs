@@ -8,6 +8,7 @@ use std::io::{self, Write};
 pub struct LineEditor {
     buffer: Vec<char>, // 存的是完整的字符
     cursor: usize,
+    has_tab: bool,
     // utf8_buf: Vec<u8>, // 暂存还没收全的字节
 }
 
@@ -16,6 +17,7 @@ impl LineEditor {
         Self {
             buffer: Vec::new(),
             cursor: 0,
+            has_tab: false,
             // utf8_buf: Vec::with_capacity(4), // UTF-8 最多4个字节
         }
     }
@@ -92,6 +94,22 @@ impl LineEditor {
         Some(line)
     }
     // TODO: 以后支持中文逻辑
+    fn retype_char(&mut self, c: char) -> Option<String> {
+        if self.cursor == self.buffer.len() {
+            // 回显逻辑也要支持中文！
+            // 注意：这里回显不能只 write_byte，要 write_str
+            let mut temp_buf = [0u8; 4];
+            let s = c.encode_utf8(&mut temp_buf);
+            let _ = write!(io::stdout(), "{}", s);
+        } else {
+            let _ = write!(io::stdout(), "\x1b[@");
+
+            let mut temp_buf = [0u8; 4];
+            let s = c.encode_utf8(&mut temp_buf);
+            let _ = write!(io::stdout(), "{}", s);
+        }
+        None
+    }
     fn handle_char(&mut self, c: char) -> Option<String> {
         if self.cursor == self.buffer.len() {
             // 插入字符
@@ -125,7 +143,23 @@ impl LineEditor {
             // println!("3{:?}\r", longest_prefix_opt);
             if let Some(longest_prefix) = longest_prefix_opt {
                 let suffix = longest_prefix.strip_prefix(&prefix).unwrap();
+                // 此时输入的不完整命令没有可以补全的最长公共前缀
                 if suffix.is_empty() {
+                    // 如果第一次按下tab就响铃
+                    if !self.has_tab {
+                        let _ = write!(io::stdout(), "{}", '\x07');
+                        self.has_tab = true;
+                    } else {
+                        // 重新设置tab状态
+                        self.has_tab = false;
+                        // TODO: 以后不用换行来补全，直接在命令下方展示
+                        let tips = commands.join("  ");
+                        let _ = write!(io::stdout(), "\r\n{}\r\n", tips);
+                        let _ = write!(io::stdout(), "$ ");
+                        for c in prefix.chars() {
+                            self.retype_char(c);
+                        }
+                    }
                     return None;
                 }
 
