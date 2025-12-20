@@ -1,4 +1,8 @@
-use crate::terminal_io::{MskEvent, MskKeyCode};
+use crate::{
+    autocompletion::longest_common_prefix,
+    terminal_io::{MskEvent, MskKeyCode},
+    trie::Trie,
+};
 use std::io::{self, Write};
 
 pub struct LineEditor {
@@ -46,7 +50,7 @@ impl LineEditor {
     //         }
     //     }
     // }
-    pub fn handle_event(&mut self, event: MskEvent) -> Option<String> {
+    pub fn handle_event(&mut self, event: MskEvent, all_commands: &Trie) -> Option<String> {
         match event {
             MskEvent::Key(msk_key_code) => match msk_key_code {
                 MskKeyCode::Char(c) => self.handle_char(c),
@@ -54,6 +58,7 @@ impl LineEditor {
                 MskKeyCode::Enter => self.handle_return(),
                 MskKeyCode::ArrowRight => self.handle_arrow_right(),
                 MskKeyCode::ArrowLeft => self.handle_arrow_left(),
+                MskKeyCode::Tab => self.handle_tab(all_commands),
             },
         }
     }
@@ -106,6 +111,31 @@ impl LineEditor {
             let mut temp_buf = [0u8; 4];
             let s = c.encode_utf8(&mut temp_buf);
             let _ = write!(io::stdout(), "{}", s);
+        }
+        None
+    }
+    /// TODO: 未来应该在这个构建
+    fn handle_tab(&mut self, all_commands: &Trie) -> Option<String> {
+        let prefix: String = self.buffer.iter().collect();
+        // println!("1{}\r", prefix);
+        // println!("{:?}/r", all_commands);
+        if let Some(commands) = all_commands.search_prefix(&prefix) {
+            // println!("2{:?}\r", commands);
+            let longest_prefix_opt = longest_common_prefix(&commands);
+            // println!("3{:?}\r", longest_prefix_opt);
+            if let Some(longest_prefix) = longest_prefix_opt {
+                let suffix = longest_prefix.strip_prefix(&prefix).unwrap();
+                if suffix.is_empty() {
+                    return None;
+                }
+
+                for c in suffix.chars() {
+                    self.handle_char(c);
+                }
+                self.handle_char(' ');
+            }
+        } else {
+            let _ = write!(io::stdout(), "{}", '\x07');
         }
         None
     }

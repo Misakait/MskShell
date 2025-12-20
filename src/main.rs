@@ -1,3 +1,4 @@
+use crate::autocompletion::collect_all_commands;
 use crate::terminal_io::get_event;
 use crate::{
     command::{parse_command, process_cmd},
@@ -7,6 +8,7 @@ use crate::{
 
 use std::io::{self, Write};
 
+mod autocompletion;
 mod command;
 mod lexer;
 mod line_editor;
@@ -14,15 +16,16 @@ mod navigation;
 mod parser;
 mod raw_mode_guard;
 mod terminal_io;
+mod trie;
 fn main() -> Result<(), io::Error> {
     let _raw_guard = RawModeGuard::new()?;
-    // let mut terminal = StdioTerminal::new();
+    let all_commands = collect_all_commands();
     let mut editor = LineEditor::new();
     write!(io::stdout(), "$ ")?;
     io::stdout().flush()?;
     loop {
         if let Some(event) = get_event() {
-            if let Some(input) = editor.handle_event(event) {
+            if let Some(input) = editor.handle_event(event, &all_commands) {
                 let cmd_opt = parse_command(&input);
                 let cmd = match cmd_opt {
                     None => {
