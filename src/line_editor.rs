@@ -166,7 +166,9 @@ impl LineEditor {
                 for c in suffix.chars() {
                     self.handle_char(c);
                 }
-                self.handle_char(' ');
+                if commands.len() == 1 {
+                    self.handle_char(' ');
+                }
             }
         } else {
             let _ = write!(io::stdout(), "{}", '\x07');
