@@ -262,13 +262,13 @@ pub fn process_single_cmd(
         MskCommand::Builtin(BuiltinCommand::ECHO, args, _) => {
             let mut writer = io_ctx.stdout.to_write();
             let output = args.unwrap().join(" ");
-            write!(writer, "{}\r\n", output)?;
+            write!(writer, "{}\n", output)?;
         }
         MskCommand::Builtin(BuiltinCommand::EXIT, _, _) => exit(0),
         MskCommand::Builtin(BuiltinCommand::PWD, _, _) => {
             let mut writer = io_ctx.stdout.to_write();
             let pwd = get_current_working_dir();
-            write!(writer, "{}\r\n", format!("{}", &pwd))?;
+            write!(writer, "{}\n", format!("{}", &pwd))?;
         }
         MskCommand::Builtin(BuiltinCommand::CD, args, _) => {
             if let Some(path) = args {
@@ -299,7 +299,7 @@ pub fn process_single_cmd(
             };
 
             let mut writer = io_ctx.stdout.to_write();
-            write!(writer, "{}\r\n", format!("{}", &msg))?;
+            write!(writer, "{}\n", format!("{}", &msg))?;
         }
         MskCommand::External(name, _paths, args, _) => {
             // terminal.flush();
@@ -327,7 +327,7 @@ pub fn process_single_cmd(
         }
         MskCommand::Unknown(name) => {
             let mut writer = io_ctx.stdout.to_write();
-            write!(writer, "{}\r\n", format!("{}: command not found", &name))?;
+            write!(writer, "{}\n", format!("{}: command not found", &name))?;
         }
     }
     // }
