@@ -1,14 +1,14 @@
 use std::fs::{self};
 use std::io::{Error, Write};
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, exit};
 use std::{env, path::PathBuf};
 
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
 
-use crate::lexer::tokens_generate;
+use crate::lexer::{Token, tokens_generate};
 use crate::navigation::{change_directory, get_current_working_dir};
 use crate::parser::{Redirection, parse_tokens_to_args};
-use crate::terminal_io::IoContext;
+use crate::terminal_io::{InputStream, IoContext, OutputStream};
 
 // 1. 重定向的操作模式 (对应 > 和 >>)
 
@@ -29,6 +29,9 @@ impl BuiltinCommand {
             BuiltinCommand::CD => "cd",
         }
     }
+}
+pub struct Pipeline {
+    pub commands: Vec<MskCommand>,
 }
 pub enum MskCommand {
     Builtin(
@@ -53,11 +56,56 @@ impl MskCommand {
         }
     }
 }
-/// 也许这里可以传进String
-pub fn parse_command(input: &str) -> Option<MskCommand> {
-    let tokens = tokens_generate(input);
+fn split_vec_by_sep<T: Eq>(vec: Vec<T>, sep: T) -> Vec<Vec<T>> {
+    let mut result = Vec::new();
+    let mut current_group = Vec::new();
 
-    let (mut all_parts, redirections) = parse_tokens_to_args(tokens);
+    for item in vec {
+        if item == sep {
+            // 遇到分隔符：若当前组非空，存入结果并重置
+            if !current_group.is_empty() {
+                result.push(current_group);
+                current_group = Vec::new();
+            }
+        } else {
+            // 非分隔符：加入当前组
+            current_group.push(item);
+        }
+    }
+
+    // 遍历结束后，将最后一个非空组存入结果
+    if !current_group.is_empty() {
+        result.push(current_group);
+    }
+
+    result
+}
+pub fn parse_tokens_to_pipeline(tokens: Vec<Token>) -> Option<Pipeline> {
+    let tokens_split = split_vec_by_sep(tokens, Token::Op("|".to_string()));
+    let commands: Vec<MskCommand> = tokens_split
+        .into_iter()
+        .map(|v| parse_tokens_to_args(v))
+        .map(|(all_parts, redirections)| parse_command(all_parts, redirections))
+        .flatten()
+        .collect();
+    if commands.is_empty() {
+        None
+    } else {
+        Some(Pipeline { commands })
+    }
+}
+pub fn parse_input(input: &str) -> Option<Pipeline> {
+    let tokens = tokens_generate(input);
+    parse_tokens_to_pipeline(tokens)
+}
+// pub fn parse_command(input: &str) -> Option<MskCommand> {
+pub fn parse_command(
+    mut all_parts: Vec<String>,
+    redirections: Option<Vec<Redirection>>,
+) -> Option<MskCommand> {
+    // let tokens = tokens_generate(input);
+
+    // let (mut all_parts, redirections) = parse_tokens_to_args(tokens);
     // println!("{:?}, {:?}\r", all_parts, redirections);
     // 3. 提取命令 (取出第一个)
     if all_parts.is_empty() {
@@ -128,6 +176,7 @@ pub fn parse_command(input: &str) -> Option<MskCommand> {
         }
     }
 }
+#[derive(Debug)]
 pub enum ProcessCmdError {
     IOError(Error),
     Other,
@@ -137,8 +186,73 @@ impl From<std::io::Error> for ProcessCmdError {
         ProcessCmdError::IOError(e)
     }
 }
-pub fn process_cmd(cmd: MskCommand) -> Result<(), ProcessCmdError> {
-    let mut io_ctx = IoContext::new();
+pub fn run_pipeline(pipelne: Pipeline) -> Result<(), ProcessCmdError> {
+    let _ = disable_raw_mode();
+    let mut children: Vec<Child> = Vec::new();
+    let mut previous_read_end = None;
+    let mut first_cmd = true;
+    let mut cmds = pipelne.commands.into_iter().peekable();
+    while let Some(cmd) = cmds.next() {
+        let io_ctx;
+        if cmds.peek().is_some() {
+            let (reader, writer) = std::io::pipe()?;
+            // 如果后面有命令检查现在是不是第一条命令
+            if first_cmd {
+                // 第一条命令的输入就是系统，输出要给下一个命令当输入
+                first_cmd = false;
+                io_ctx = IoContext {
+                    stdout: OutputStream::Pipe(writer),
+                    stderr: OutputStream::Inherit,
+                    stdin: InputStream::Inherit,
+                };
+            } else {
+                // 下一条还有命令，但是自己不是第一条命令
+                io_ctx = IoContext {
+                    stdout: OutputStream::Pipe(writer),
+                    stderr: OutputStream::Inherit,
+                    // 此时可以安全unwrap因为第一次运行保证了里面必定有值
+                    stdin: InputStream::Pipe(previous_read_end.take().unwrap()),
+                };
+            }
+            // 给下一条命令保存读端
+            previous_read_end = Some(reader);
+        } else {
+            if first_cmd {
+                // 如果后面没有管道就证明自己是最后一条命令，直接写入标准输出
+                // 但是如果如果自己同时是第一条命令，标准输入是继承
+                io_ctx = IoContext::new()
+            } else {
+                io_ctx = IoContext {
+                    stdout: OutputStream::Inherit,
+                    stderr: OutputStream::Inherit,
+                    // 此时可以安全unwrap因为第一次运行保证了里面必定有值
+                    stdin: InputStream::Pipe(previous_read_end.take().unwrap()),
+                };
+            }
+        }
+
+        match process_single_cmd(cmd, io_ctx) {
+            Ok(Some(child)) => children.push(child),
+            Ok(None) => {} // Builtin 命令没有子进程
+            Err(e) => eprintln!("Command execution error: {:?}\r", e),
+        }
+    }
+    for mut child in children {
+        let _ = child.wait();
+    }
+    let _ = enable_raw_mode();
+    Ok(())
+}
+pub fn process_single_cmd(
+    cmd: MskCommand,
+    mut io_ctx: IoContext,
+) -> Result<Option<Child>, ProcessCmdError> {
+    // let mut cmds = pipelne.commands.into_iter().peekable();
+    // let mut io_ctx = IoContext::new();
+    // io_ctx.stdin = stdin;
+    // io_ctx.stdout = OutputStream::from_stdio(stdout);
+    // io_ctx.stderr = OutputStream::from_stdio(stderr);
+    // while let Some(cmd) = cmds.next() {
     let redirections_opt = cmd.get_redirections();
     if let Some(redirections) = redirections_opt {
         io_ctx.apply_redirections(redirections)?;
@@ -150,7 +264,7 @@ pub fn process_cmd(cmd: MskCommand) -> Result<(), ProcessCmdError> {
             let output = args.unwrap().join(" ");
             write!(writer, "{}\r\n", output)?;
         }
-        MskCommand::Builtin(BuiltinCommand::EXIT, _, _) => return Err(ProcessCmdError::Other),
+        MskCommand::Builtin(BuiltinCommand::EXIT, _, _) => exit(0),
         MskCommand::Builtin(BuiltinCommand::PWD, _, _) => {
             let mut writer = io_ctx.stdout.to_write();
             let pwd = get_current_working_dir();
@@ -166,7 +280,8 @@ pub fn process_cmd(cmd: MskCommand) -> Result<(), ProcessCmdError> {
         MskCommand::Builtin(BuiltinCommand::TYPE, args_opt, _) => {
             let msg = {
                 if let Some(args) = args_opt {
-                    match parse_command(&args[0]) {
+                    // match parse_command(&args[0]) {
+                    match parse_command(args, None) {
                         None => unreachable!(),
                         Some(MskCommand::Builtin(command_type, _, _)) => {
                             format!("{} is a shell builtin", command_type.name())
@@ -189,48 +304,61 @@ pub fn process_cmd(cmd: MskCommand) -> Result<(), ProcessCmdError> {
         MskCommand::External(name, _paths, args, _) => {
             // terminal.flush();
             io_ctx.flush_stdout()?;
-            let _ = disable_raw_mode();
-            run_command(
-                &name,
-                args.as_deref(),
-                io_ctx.stdout.to_stdio(),
-                io_ctx.stderr.to_stdio(),
-            );
-            let _ = enable_raw_mode();
+            // let _ = disable_raw_mode();
+            // run_command(
+            //     &name,
+            //     args.as_deref(),
+            //     io_ctx.stdout.to_stdio(),
+            //     io_ctx.stderr.to_stdio(),
+            // );
+            let mut command = Command::new(name);
+            if let Some(a) = args {
+                command.args(a);
+            }
+
+            let child = command
+                .stdin(io_ctx.stdin.to_stdio())
+                .stdout(io_ctx.stdout.to_stdio())
+                .stderr(io_ctx.stderr.to_stdio())
+                .spawn()?;
+
+            // let _ = enable_raw_mode();
+            return Ok(Some(child));
         }
         MskCommand::Unknown(name) => {
             let mut writer = io_ctx.stdout.to_write();
             write!(writer, "{}\r\n", format!("{}: command not found", &name))?;
         }
     }
-    Ok(())
+    // }
+    Ok(None)
 }
 
-pub fn run_command(executable_file: &str, args_opt: Option<&[String]>, out: Stdio, err: Stdio) {
-    let mut command = Command::new(executable_file);
-    if let Some(args) = args_opt {
-        command.args(args);
-    }
-    command.stdout(out);
-    command.stderr(err);
-    // status() 会启动子进程，阻塞当前线程直到子进程结束
-    // 并且默认会继承父进程的 stdin/stdout/stderr (也就是直接打印到屏幕)
-    match command.status() {
-        Ok(exit_status) => {
-            if exit_status.success() {
-                // 成功运行且返回码为 0
-            } else {
-                // 运行了，但返回了非 0 错误码
-                // 比如 grep 没找到东西返回 1
-                // 你可以使用 exit_status.code() 获取具体数字
-            }
-        }
-        Err(e) => {
-            // 根本没跑起来（比如文件格式错误、IO错误等）
-            eprintln!("Failed to execute command: {}", e);
-        }
-    }
-}
+// pub fn run_command(executable_file: &str, args_opt: Option<&[String]>, out: Stdio, err: Stdio) {
+//     let mut command = Command::new(executable_file);
+//     if let Some(args) = args_opt {
+//         command.args(args);
+//     }
+//     command.stdout(out);
+//     command.stderr(err);
+//     // status() 会启动子进程，阻塞当前线程直到子进程结束
+//     // 并且默认会继承父进程的 stdin/stdout/stderr (也就是直接打印到屏幕)
+//     match command.status() {
+//         Ok(exit_status) => {
+//             if exit_status.success() {
+//                 // 成功运行且返回码为 0
+//             } else {
+//                 // 运行了，但返回了非 0 错误码
+//                 // 比如 grep 没找到东西返回 1
+//                 // 你可以使用 exit_status.code() 获取具体数字
+//             }
+//         }
+//         Err(e) => {
+//             // 根本没跑起来（比如文件格式错误、IO错误等）
+//             eprintln!("Failed to execute command: {}", e);
+//         }
+//     }
+// }
 pub fn is_executable(path: &std::path::Path) -> bool {
     // 第一步：如果文件根本不存在，直接返回 false
     let metadata = match fs::metadata(path) {

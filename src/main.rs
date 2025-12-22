@@ -1,10 +1,7 @@
 use crate::autocompletion::collect_all_commands;
+use crate::command::{parse_input, run_pipeline};
 use crate::terminal_io::get_event;
-use crate::{
-    command::{parse_command, process_cmd},
-    line_editor::LineEditor,
-    raw_mode_guard::RawModeGuard,
-};
+use crate::{line_editor::LineEditor, raw_mode_guard::RawModeGuard};
 
 use std::io::{self, Write};
 
@@ -26,7 +23,7 @@ fn main() -> Result<(), io::Error> {
     loop {
         if let Some(event) = get_event() {
             if let Some(input) = editor.handle_event(event, &all_commands) {
-                let cmd_opt = parse_command(&input);
+                let cmd_opt = parse_input(&input);
                 let cmd = match cmd_opt {
                     None => {
                         write!(io::stdout(), "\r")?;
@@ -36,7 +33,7 @@ fn main() -> Result<(), io::Error> {
                     } // 空行，继续读取下一行
                     Some(c) => c,
                 };
-                if let Err(_) = process_cmd(cmd) {
+                if let Err(_) = run_pipeline(cmd) {
                     break;
                 }
                 write!(io::stdout(), "\r")?;

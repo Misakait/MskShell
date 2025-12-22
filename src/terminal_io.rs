@@ -35,23 +35,25 @@ pub fn get_event() -> Option<MskEvent> {
     }
 }
 use std::fs::{File, OpenOptions};
-use std::io::{self, Write};
+use std::io::{self, PipeReader, PipeWriter, Write};
 use std::process::Stdio;
 
 use crate::parser::{Redirection, RedirectionMode, RedirectionTarget};
 
 // 定义输出流的目标：要么是继承父进程（屏幕），要么是文件
-// 将来支持管道时，这里加一个 Pipe(File) 即可，扩展性极强
+// 将来支持管道时，这里加一个 Pipe
 pub enum OutputStream {
     Inherit,    // 默认：屏幕
     File(File), // 重定向：文件
+    Pipe(PipeWriter),
 }
 
 impl OutputStream {
-    pub fn to_stdio(&self) -> Stdio {
+    pub fn to_stdio(self) -> Stdio {
         match self {
             OutputStream::Inherit => Stdio::inherit(),
             OutputStream::File(f) => Stdio::from(f.try_clone().unwrap()),
+            OutputStream::Pipe(stdio) => stdio.into(),
         }
     }
 
@@ -59,15 +61,27 @@ impl OutputStream {
         match self {
             OutputStream::Inherit => Box::new(io::stdout()),
             OutputStream::File(f) => Box::new(f),
+            OutputStream::Pipe(stdio) => Box::new(stdio),
         }
     }
 }
-
+pub enum InputStream {
+    Inherit,
+    Pipe(PipeReader),
+}
+impl InputStream {
+    pub fn to_stdio(self) -> Stdio {
+        match self {
+            InputStream::Inherit => Stdio::inherit(),
+            InputStream::Pipe(stdio) => stdio.into(),
+        }
+    }
+}
 // I/O 上下文：管理当前命令的 stdin/stdout/stderr
 pub struct IoContext {
     pub stdout: OutputStream,
     pub stderr: OutputStream,
-    // pub stdin: InputStream, // 未来支持输入重定向
+    pub stdin: InputStream,
 }
 
 impl IoContext {
@@ -75,6 +89,7 @@ impl IoContext {
         Self {
             stdout: OutputStream::Inherit,
             stderr: OutputStream::Inherit,
+            stdin: InputStream::Inherit,
         }
     }
     pub fn flush_stdout(&mut self) -> io::Result<()> {
@@ -83,6 +98,7 @@ impl IoContext {
             OutputStream::Inherit => io::stdout().flush()?,
             // 如果是 File，调用 File 的 flush (系统调用 fsync 或类似)
             OutputStream::File(f) => f.flush()?,
+            OutputStream::Pipe(stdio) => stdio.flush()?,
         }
 
         Ok(())
@@ -92,6 +108,7 @@ impl IoContext {
             // 如果是 Inherit，说明指向的是标准错误，刷新 io::stderr
             OutputStream::Inherit => io::stderr().flush()?,
             OutputStream::File(f) => f.flush()?,
+            OutputStream::Pipe(stdio) => stdio.flush()?,
         }
 
         Ok(())

@@ -1,12 +1,12 @@
 use std::mem;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum Token {
     Op(String),
     Word(Vec<Args>),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum Args {
     Raw(String),
     SingleQuotes(String),
@@ -33,20 +33,19 @@ pub fn tokens_generate(input: &str) -> Vec<Token> {
 
     let mut state = ParseState::Normal;
 
-    let mut flush_string_to_args =
-        |args_vec: &mut Vec<Args>, s: &mut String, state: &ParseState| {
-            if !s.is_empty() {
-                let value_to_push = mem::take(s);
-                match state {
-                    ParseState::Normal => args_vec.push(Args::Raw(value_to_push)),
-                    ParseState::InSingleQuotes => args_vec.push(Args::SingleQuotes(value_to_push)),
-                    ParseState::InDoubleQuotes => args_vec.push(Args::DoubleQuotes(value_to_push)),
-                }
+    let flush_string_to_args = |args_vec: &mut Vec<Args>, s: &mut String, state: &ParseState| {
+        if !s.is_empty() {
+            let value_to_push = mem::take(s);
+            match state {
+                ParseState::Normal => args_vec.push(Args::Raw(value_to_push)),
+                ParseState::InSingleQuotes => args_vec.push(Args::SingleQuotes(value_to_push)),
+                ParseState::InDoubleQuotes => args_vec.push(Args::DoubleQuotes(value_to_push)),
             }
-        };
+        }
+    };
 
     // --- 辅助闭包：负责把 Level 2 冲刷到 Level 3 ---
-    let mut flush_args_to_token = |tokens_vec: &mut Vec<Token>, args_vec: &mut Vec<Args>| {
+    let flush_args_to_token = |tokens_vec: &mut Vec<Token>, args_vec: &mut Vec<Args>| {
         if !args_vec.is_empty() {
             tokens_vec.push(Token::Word(mem::take(args_vec)));
         }
