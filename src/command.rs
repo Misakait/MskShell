@@ -8,6 +8,7 @@ use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
 use crate::lexer::{Token, tokens_generate};
 use crate::navigation::{change_directory, get_current_working_dir};
 use crate::parser::{Redirection, parse_tokens_to_args};
+use crate::state::ShellState;
 use crate::terminal_io::{InputStream, IoContext, OutputStream};
 
 pub enum BuiltinCommand {
@@ -191,7 +192,7 @@ impl From<std::io::Error> for ProcessCmdError {
         ProcessCmdError::IOError(e)
     }
 }
-pub fn run_pipeline(pipelne: Pipeline) -> Result<(), ProcessCmdError> {
+pub fn run_pipeline(pipelne: Pipeline, state: &ShellState) -> Result<(), ProcessCmdError> {
     let _ = disable_raw_mode();
     let mut children: Vec<Child> = Vec::new();
     let mut previous_read_end = None;
@@ -236,7 +237,7 @@ pub fn run_pipeline(pipelne: Pipeline) -> Result<(), ProcessCmdError> {
             }
         }
 
-        match process_single_cmd(cmd, io_ctx) {
+        match process_single_cmd(cmd, io_ctx, state) {
             Ok(Some(child)) => children.push(child),
             Ok(None) => {} // Builtin 命令没有子进程
             Err(e) => eprintln!("Command execution error: {:?}\r", e),
@@ -251,6 +252,7 @@ pub fn run_pipeline(pipelne: Pipeline) -> Result<(), ProcessCmdError> {
 pub fn process_single_cmd(
     cmd: MskCommand,
     mut io_ctx: IoContext,
+    state: &ShellState,
 ) -> Result<Option<Child>, ProcessCmdError> {
     // let mut cmds = pipelne.commands.into_iter().peekable();
     // let mut io_ctx = IoContext::new();
@@ -282,7 +284,12 @@ pub fn process_single_cmd(
                 change_directory("~");
             }
         }
-        MskCommand::Builtin(BuiltinCommand::HISTORY, args, _) => {}
+        MskCommand::Builtin(BuiltinCommand::HISTORY, _args, _) => {
+            let mut writer = io_ctx.stdout.to_write();
+            for (i, command) in state.history.iter().enumerate() {
+                writeln!(writer, "{:5}  {}", i + 1, command)?;
+            }
+        }
         MskCommand::Builtin(BuiltinCommand::TYPE, args_opt, _) => {
             let msg = {
                 if let Some(args) = args_opt {

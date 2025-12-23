@@ -42,7 +42,7 @@ fn main() -> Result<(), io::Error> {
                         state.add_history(input);
                     }
                 };
-                if let Err(_) = run_pipeline(cmd) {
+                if let Err(_) = run_pipeline(cmd, &state) {
                     break;
                 }
                 write!(io::stdout(), "\r")?;
