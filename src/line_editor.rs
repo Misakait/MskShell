@@ -52,17 +52,23 @@ impl LineEditor {
     //         }
     //     }
     // }
-    pub fn handle_event(&mut self, event: MskEvent, all_commands: &Trie) -> Option<String> {
+    pub fn handle_event(
+        &mut self,
+        event: MskEvent,
+        all_commands: &Trie,
+        history: &Vec<String>,
+        history_cursor: &mut usize,
+    ) -> Option<String> {
         match event {
             MskEvent::Key(msk_key_code) => match msk_key_code {
                 MskKeyCode::Char(c) => self.handle_char(c),
                 MskKeyCode::Backspace => self.handle_backsapce(),
-                MskKeyCode::Enter => self.handle_return(),
+                MskKeyCode::Enter => self.handle_return(history_cursor, history.len()),
                 MskKeyCode::ArrowRight => self.handle_arrow_right(),
                 MskKeyCode::ArrowLeft => self.handle_arrow_left(),
                 MskKeyCode::Tab => self.handle_tab(all_commands),
-                MskKeyCode::Up => None,
-                MskKeyCode::Down => None,
+                MskKeyCode::Up => self.handle_up(history, history_cursor),
+                MskKeyCode::Down => self.handle_down(history, history_cursor),
             },
         }
     }
@@ -88,7 +94,8 @@ impl LineEditor {
         }
         None
     }
-    fn handle_return(&mut self) -> Option<String> {
+    fn handle_return(&mut self, history_cursor: &mut usize, len: usize) -> Option<String> {
+        *history_cursor = len + 1;
         let line: String = self.buffer.iter().collect();
         self.buffer.clear();
         self.cursor = 0;
@@ -175,6 +182,41 @@ impl LineEditor {
             }
         } else {
             let _ = write!(io::stdout(), "{}", '\x07');
+        }
+        None
+    }
+    fn replace_buffer(&mut self, new_content: &str) {
+        // 清空视觉层：先把光标移到行首，然后清除整行
+        // \r: 回行首, \x1b[K: 清除光标后所有内容
+        let _ = write!(io::stdout(), "\r\x1b[K$ ");
+
+        // 更新内存层
+        self.buffer.clear();
+        for c in new_content.chars() {
+            self.buffer.push(c);
+        }
+        self.cursor = self.buffer.len(); // 光标置于末尾
+
+        // 重新绘制新内容
+        let _ = write!(io::stdout(), "{}", new_content);
+        let _ = io::stdout().flush();
+    }
+    fn handle_up(&mut self, history: &Vec<String>, history_cursor: &mut usize) -> Option<String> {
+        if *history_cursor > 0 {
+            *history_cursor -= 1;
+            let command = &history[*history_cursor];
+            self.replace_buffer(command);
+        }
+        None
+    }
+
+    fn handle_down(&mut self, history: &Vec<String>, history_cursor: &mut usize) -> Option<String> {
+        if *history_cursor < history.len() - 1 {
+            *history_cursor += 1;
+            let command = &history[*history_cursor];
+            self.replace_buffer(command);
+        } else {
+            self.replace_buffer("");
         }
         None
     }

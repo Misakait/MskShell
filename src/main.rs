@@ -26,7 +26,12 @@ fn main() -> Result<(), io::Error> {
     io::stdout().flush()?;
     loop {
         if let Some(event) = get_event() {
-            if let Some(input) = editor.handle_event(event, &all_commands) {
+            if let Some(input) = editor.handle_event(
+                event,
+                &all_commands,
+                &state.history,
+                &mut state.history_cursor,
+            ) {
                 let cmd_opt = parse_input(&input);
                 let cmd;
                 match cmd_opt {
@@ -42,7 +47,7 @@ fn main() -> Result<(), io::Error> {
                         state.add_history(input);
                     }
                 };
-                if let Err(_) = run_pipeline(cmd, &state) {
+                if let Err(_) = run_pipeline(cmd, &state.history) {
                     break;
                 }
                 write!(io::stdout(), "\r")?;
