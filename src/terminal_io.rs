@@ -8,6 +8,8 @@ pub enum MskKeyCode {
     ArrowRight,
     ArrowLeft,
     Tab,
+    Up,
+    Down,
 }
 
 pub fn get_event() -> Option<MskEvent> {
@@ -25,6 +27,8 @@ pub fn get_event() -> Option<MskEvent> {
             KeyCode::Right => return Some(MskEvent::Key(MskKeyCode::ArrowRight)),
             KeyCode::Left => return Some(MskEvent::Key(MskKeyCode::ArrowLeft)),
             KeyCode::Tab => return Some(MskEvent::Key(MskKeyCode::Tab)),
+            KeyCode::Up => return Some(MskEvent::Key(MskKeyCode::Up)),
+            KeyCode::Down => return Some(MskEvent::Key(MskKeyCode::Down)),
             _ => {
                 return None;
             }

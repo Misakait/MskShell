@@ -61,6 +61,8 @@ impl LineEditor {
                 MskKeyCode::ArrowRight => self.handle_arrow_right(),
                 MskKeyCode::ArrowLeft => self.handle_arrow_left(),
                 MskKeyCode::Tab => self.handle_tab(all_commands),
+                MskKeyCode::Up => None,
+                MskKeyCode::Down => None,
             },
         }
     }
