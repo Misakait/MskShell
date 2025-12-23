@@ -10,11 +10,10 @@ use crate::navigation::{change_directory, get_current_working_dir};
 use crate::parser::{Redirection, parse_tokens_to_args};
 use crate::terminal_io::{InputStream, IoContext, OutputStream};
 
-// 1. 重定向的操作模式 (对应 > 和 >>)
-
 pub enum BuiltinCommand {
     ECHO,
     EXIT,
+    HISTORY,
     TYPE,
     PWD,
     CD,
@@ -24,6 +23,7 @@ impl BuiltinCommand {
         match self {
             BuiltinCommand::ECHO => "echo",
             BuiltinCommand::EXIT => "exit",
+            BuiltinCommand::HISTORY => "history",
             BuiltinCommand::TYPE => "type",
             BuiltinCommand::PWD => "pwd",
             BuiltinCommand::CD => "cd",
@@ -142,6 +142,11 @@ pub fn parse_command(
                 ))
             }
         }
+        "history" => Some(MskCommand::Builtin(
+            BuiltinCommand::HISTORY,
+            Some(args),
+            redirections,
+        )),
         "pwd" => Some(MskCommand::Builtin(BuiltinCommand::PWD, None, redirections)),
         "cd" => {
             if args.is_empty() {
@@ -277,6 +282,7 @@ pub fn process_single_cmd(
                 change_directory("~");
             }
         }
+        MskCommand::Builtin(BuiltinCommand::HISTORY, args, _) => {}
         MskCommand::Builtin(BuiltinCommand::TYPE, args_opt, _) => {
             let msg = {
                 if let Some(args) = args_opt {

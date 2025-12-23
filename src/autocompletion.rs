@@ -8,7 +8,7 @@ pub fn collect_all_commands() -> Trie {
     let mut commands = Trie::new();
 
     // 1. 加入内置命令
-    let builtins = vec!["echo", "exit", "type", "pwd", "cd"];
+    let builtins = vec!["echo", "exit", "type", "history", "pwd", "cd"];
     for b in builtins {
         commands.insert(b);
     }
