@@ -1,5 +1,6 @@
 use std::fs::{self};
 use std::io::{Error, Write};
+use std::num::ParseIntError;
 use std::process::{Child, Command, exit};
 use std::{env, path::PathBuf};
 
@@ -143,11 +144,21 @@ pub fn parse_command(
                 ))
             }
         }
-        "history" => Some(MskCommand::Builtin(
-            BuiltinCommand::HISTORY,
-            Some(args),
-            redirections,
-        )),
+        "history" => {
+            if args.is_empty() {
+                Some(MskCommand::Builtin(
+                    BuiltinCommand::HISTORY,
+                    None,
+                    redirections,
+                ))
+            } else {
+                Some(MskCommand::Builtin(
+                    BuiltinCommand::HISTORY,
+                    Some(args),
+                    redirections,
+                ))
+            }
+        }
         "pwd" => Some(MskCommand::Builtin(BuiltinCommand::PWD, None, redirections)),
         "cd" => {
             if args.is_empty() {
@@ -185,7 +196,13 @@ pub fn parse_command(
 #[derive(Debug)]
 pub enum ProcessCmdError {
     IOError(Error),
+    ArgsError(String),
     Other,
+}
+impl From<ParseIntError> for ProcessCmdError {
+    fn from(_value: ParseIntError) -> Self {
+        ProcessCmdError::ArgsError("该参数应为数字".into())
+    }
 }
 impl From<std::io::Error> for ProcessCmdError {
     fn from(e: std::io::Error) -> Self {
@@ -284,10 +301,21 @@ pub fn process_single_cmd(
                 change_directory("~");
             }
         }
-        MskCommand::Builtin(BuiltinCommand::HISTORY, _args, _) => {
+        MskCommand::Builtin(BuiltinCommand::HISTORY, args_opt, _) => {
             let mut writer = io_ctx.stdout.to_write();
-            for (i, command) in state.history.iter().enumerate() {
-                writeln!(writer, "{:5}  {}", i + 1, command)?;
+            if let Some(args) = args_opt {
+                let limit = args[0].parse::<usize>()?;
+                let history_len = state.history.len();
+                // 若 limit >= 历史总数，从 0 开始；否则从 history_len - limit 开始
+                let start_idx = history_len.saturating_sub(limit);
+                for (idx, command) in state.history[start_idx..].iter().enumerate() {
+                    let display_idx = start_idx + idx + 1;
+                    writeln!(writer, "{:5}  {}", display_idx, command)?;
+                }
+            } else {
+                for (i, command) in state.history.iter().enumerate() {
+                    writeln!(writer, "{:5}  {}", i + 1, command)?;
+                }
             }
         }
         MskCommand::Builtin(BuiltinCommand::TYPE, args_opt, _) => {
