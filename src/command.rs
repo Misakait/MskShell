@@ -208,7 +208,7 @@ impl From<std::io::Error> for ProcessCmdError {
         ProcessCmdError::IOError(e)
     }
 }
-pub fn run_pipeline(pipelne: Pipeline, history: &Vec<String>) -> Result<(), ProcessCmdError> {
+pub fn run_pipeline(pipelne: Pipeline, history: &mut Vec<String>) -> Result<(), ProcessCmdError> {
     let _ = disable_raw_mode();
     let mut children: Vec<Child> = Vec::new();
     let mut previous_read_end = None;
@@ -268,7 +268,7 @@ pub fn run_pipeline(pipelne: Pipeline, history: &Vec<String>) -> Result<(), Proc
 pub fn process_single_cmd(
     cmd: MskCommand,
     mut io_ctx: IoContext,
-    history: &Vec<String>,
+    history: &mut Vec<String>,
 ) -> Result<Option<Child>, ProcessCmdError> {
     // let mut cmds = pipelne.commands.into_iter().peekable();
     // let mut io_ctx = IoContext::new();
@@ -303,13 +303,23 @@ pub fn process_single_cmd(
         MskCommand::Builtin(BuiltinCommand::HISTORY, args_opt, _) => {
             let mut writer = io_ctx.stdout.to_write();
             if let Some(args) = args_opt {
-                let limit = args[0].parse::<usize>()?;
-                let history_len = history.len();
-                // 若 limit >= 历史总数，从 0 开始；否则从 history_len - limit 开始
-                let start_idx = history_len.saturating_sub(limit);
-                for (idx, command) in history[start_idx..].iter().enumerate() {
-                    let display_idx = start_idx + idx + 1;
-                    writeln!(writer, "{:5}  {}", display_idx, command)?;
+                if args.len() == 2 && args[0] == "-r" {
+                    let content = fs::read_to_string(&args[1])?;
+                    let mut lines: Vec<String> = content
+                        .lines()
+                        .map(|line| line.trim().to_string())
+                        .filter(|line| !line.is_empty())
+                        .collect();
+                    history.append(&mut lines);
+                } else {
+                    let limit = args[0].parse::<usize>()?;
+                    let history_len = history.len();
+                    // 若 limit >= 历史总数，从 0 开始；否则从 history_len - limit 开始
+                    let start_idx = history_len.saturating_sub(limit);
+                    for (idx, command) in history[start_idx..].iter().enumerate() {
+                        let display_idx = start_idx + idx + 1;
+                        writeln!(writer, "{:5}  {}", display_idx, command)?;
+                    }
                 }
             } else {
                 for (i, command) in history.iter().enumerate() {
