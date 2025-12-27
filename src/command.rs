@@ -1,5 +1,5 @@
-use std::fs::{self};
-use std::io::{Error, Write};
+use std::fs::{self, File};
+use std::io::{BufWriter, Error, Write};
 use std::num::ParseIntError;
 use std::process::{Child, Command, exit};
 use std::{env, path::PathBuf};
@@ -303,14 +303,25 @@ pub fn process_single_cmd(
         MskCommand::Builtin(BuiltinCommand::HISTORY, args_opt, _) => {
             let mut writer = io_ctx.stdout.to_write();
             if let Some(args) = args_opt {
-                if args.len() == 2 && args[0] == "-r" {
-                    let content = fs::read_to_string(&args[1])?;
-                    let mut lines: Vec<String> = content
-                        .lines()
-                        .map(|line| line.trim().to_string())
-                        .filter(|line| !line.is_empty())
-                        .collect();
-                    history.append(&mut lines);
+                if args.len() == 2 {
+                    if args[0] == "-r" {
+                        let content = fs::read_to_string(&args[1])?;
+                        let mut lines: Vec<String> = content
+                            .lines()
+                            .map(|line| line.trim().to_string())
+                            .filter(|line| !line.is_empty())
+                            .collect();
+                        history.append(&mut lines);
+                    } else if args[0] == "-w" {
+                        let file = File::create(&args[1])?;
+                        let mut writer = BufWriter::new(file);
+                        for item in history {
+                            writeln!(writer, "{}", item)?;
+                        }
+                        // writeln!(writer)?;
+                        writer.flush()?;
+                    } else if args[0] == "-a" {
+                    }
                 } else {
                     let limit = args[0].parse::<usize>()?;
                     let history_len = history.len();
