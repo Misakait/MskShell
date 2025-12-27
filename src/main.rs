@@ -22,6 +22,7 @@ fn main() -> Result<(), io::Error> {
     let all_commands = collect_all_commands();
     let mut editor = LineEditor::new();
     let mut state = ShellState::new();
+    state.init()?;
     write!(io::stdout(), "$ ")?;
     io::stdout().flush()?;
     loop {
