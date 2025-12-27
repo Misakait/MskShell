@@ -47,7 +47,9 @@ fn main() -> Result<(), io::Error> {
                         state.add_history(input);
                     }
                 };
-                if let Err(_) = run_pipeline(cmd, &mut state.history) {
+                if let Err(_) =
+                    run_pipeline(cmd, &mut state.history, &mut state.history_written_count)
+                {
                     break;
                 }
                 write!(io::stdout(), "\r")?;

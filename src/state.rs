@@ -1,6 +1,7 @@
 pub struct ShellState {
     pub history: Vec<String>,
     pub history_cursor: usize,
+    pub history_written_count: usize,
 }
 
 impl ShellState {
@@ -8,6 +9,7 @@ impl ShellState {
         Self {
             history: Vec::new(),
             history_cursor: 0,
+            history_written_count: 0,
         }
     }
 

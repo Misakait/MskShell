@@ -1,4 +1,4 @@
-use std::fs::{self, File};
+use std::fs::{self, File, OpenOptions};
 use std::io::{BufWriter, Error, Write};
 use std::num::ParseIntError;
 use std::process::{Child, Command, exit};
@@ -208,7 +208,11 @@ impl From<std::io::Error> for ProcessCmdError {
         ProcessCmdError::IOError(e)
     }
 }
-pub fn run_pipeline(pipelne: Pipeline, history: &mut Vec<String>) -> Result<(), ProcessCmdError> {
+pub fn run_pipeline(
+    pipelne: Pipeline,
+    history: &mut Vec<String>,
+    history_written_count: &mut usize,
+) -> Result<(), ProcessCmdError> {
     let _ = disable_raw_mode();
     let mut children: Vec<Child> = Vec::new();
     let mut previous_read_end = None;
@@ -253,7 +257,7 @@ pub fn run_pipeline(pipelne: Pipeline, history: &mut Vec<String>) -> Result<(), 
             }
         }
 
-        match process_single_cmd(cmd, io_ctx, history) {
+        match process_single_cmd(cmd, io_ctx, history, history_written_count) {
             Ok(Some(child)) => children.push(child),
             Ok(None) => {} // Builtin 命令没有子进程
             Err(e) => eprintln!("Command execution error: {:?}\r", e),
@@ -269,6 +273,7 @@ pub fn process_single_cmd(
     cmd: MskCommand,
     mut io_ctx: IoContext,
     history: &mut Vec<String>,
+    history_written_count: &mut usize,
 ) -> Result<Option<Child>, ProcessCmdError> {
     // let mut cmds = pipelne.commands.into_iter().peekable();
     // let mut io_ctx = IoContext::new();
@@ -312,15 +317,25 @@ pub fn process_single_cmd(
                             .filter(|line| !line.is_empty())
                             .collect();
                         history.append(&mut lines);
+                        *history_written_count = history.len();
                     } else if args[0] == "-w" {
                         let file = File::create(&args[1])?;
                         let mut writer = BufWriter::new(file);
                         for item in history {
                             writeln!(writer, "{}", item)?;
                         }
-                        // writeln!(writer)?;
                         writer.flush()?;
                     } else if args[0] == "-a" {
+                        let file = OpenOptions::new()
+                            .create(true)
+                            .append(true)
+                            .open(&args[1])?;
+                        let mut writer = BufWriter::new(file);
+                        for item in &history[*history_written_count..] {
+                            writeln!(writer, "{}", item)?;
+                        }
+                        writer.flush()?;
+                        *history_written_count = history.len();
                     }
                 } else {
                     let limit = args[0].parse::<usize>()?;
