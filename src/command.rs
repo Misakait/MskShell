@@ -292,7 +292,21 @@ pub fn process_single_cmd(
             let output = args.unwrap().join(" ");
             write!(writer, "{}\n", output)?;
         }
-        MskCommand::Builtin(BuiltinCommand::EXIT, _, _) => exit(0),
+        MskCommand::Builtin(BuiltinCommand::EXIT, _, _) => {
+            if let Ok(path) = env::var("HISTFILE") {
+                let file = OpenOptions::new()
+                    .create(true)
+                    .write(true)
+                    .truncate(true)
+                    .open(path)?;
+                let mut writer = BufWriter::new(file);
+                for item in history {
+                    writeln!(writer, "{}", item)?;
+                }
+                writer.flush()?;
+            }
+            exit(0)
+        }
         MskCommand::Builtin(BuiltinCommand::PWD, _, _) => {
             let mut writer = io_ctx.stdout.to_write();
             let pwd = get_current_working_dir();
